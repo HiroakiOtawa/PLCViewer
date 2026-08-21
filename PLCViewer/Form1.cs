@@ -12,6 +12,10 @@ namespace PLCViewer
         private readonly McProtocolClient _plcClient = new();
         private TextBox? _analogCellEditor;
         private static readonly Color ChangedCellBackColor = Color.Yellow;
+        private bool _digContinuousEnabled;
+        private bool _anaContinuousEnabled;
+        private bool _digContinuousReadBusy;
+        private bool _anaContinuousReadBusy;
 
         public Form1()
         {
@@ -24,6 +28,7 @@ namespace PLCViewer
             InitializeDeviceComboBoxes();
             InitializeDigitalListViewColumns();
             InitializeAnalogListViewColumns();
+            ApplyDigitalBitColumnDisplayOrder(chkDigBitOrderReversed.Checked);
             UpdateFormTitle();
         }
 
@@ -85,6 +90,22 @@ namespace PLCViewer
                 lvwDigital.Columns.Add($"{bit}", 45);
             }
             lvwDigital.Columns.Add("ワード数値", 80);
+        }
+
+        private void ChkDigBitOrderReversed_CheckedChanged(object? sender, EventArgs e)
+        {
+            ApplyDigitalBitColumnDisplayOrder(chkDigBitOrderReversed.Checked);
+        }
+
+        // Bit列の表示順を切り替える。SubItemsの列インデックス自体は変更せず、
+        // 各列のDisplayIndexのみを変更することで、値の再構成や編集ロジックに影響を与えずに見た目だけ左右反転する。
+        // reversed=falseの場合は Bit15(左)～Bit0(右)、trueの場合は Bit0(左)～Bit15(右) の順で表示する。
+        private void ApplyDigitalBitColumnDisplayOrder(bool reversed)
+        {
+            for (int columnIndex = 1; columnIndex <= 16; columnIndex++)
+            {
+                lvwDigital.Columns[columnIndex].DisplayIndex = reversed ? 17 - columnIndex : columnIndex;
+            }
         }
 
         // 「先頭アドレス」「+0」…「+9」の計11列。
@@ -161,6 +182,8 @@ namespace PLCViewer
             cboPlcSeries.Enabled = true;
             txtIpAddress.Enabled = true;
             txtPort.Enabled = true;
+            SetDigContinuousMode(false);
+            SetAnaContinuousMode(false);
         }
 
 
@@ -169,9 +192,55 @@ namespace PLCViewer
             DigRead();
         }
 
+        // 「連続読み込み」ラジオボタンのトグル動作(単独配置のため、クリックのたびにON/OFFを切り替える)。
+        private void RdoDigContinuous_Click(object? sender, EventArgs e)
+        {
+            SetDigContinuousMode(!_digContinuousEnabled);
+        }
+
+        // 連続読み込みのON/OFFを切り替える。ON時は読込・書込ボタンをdisableにし、1秒間隔のタイマーを開始する。
+        private void SetDigContinuousMode(bool enabled)
+        {
+            _digContinuousEnabled = enabled;
+            rdoDigContinuous.Checked = enabled;
+            btnDigRead.Enabled = !enabled;
+            btnDigWrite.Enabled = !enabled;
+            timerDigContinuous.Enabled = enabled;
+        }
+
+        // 連続読み込みタイマーのTickごとにデジタル読み込みを実行する。前回の読み込みが完了していない場合はスキップする。
+        private async void TimerDigContinuous_Tick(object? sender, EventArgs e)
+        {
+            if (_digContinuousReadBusy)
+            {
+                return;
+            }
+
+            _digContinuousReadBusy = true;
+            try
+            {
+                EnsureConnected();
+                await ReadDigitalAsync();
+            }
+            catch (Exception ex)
+            {
+                SetDigContinuousMode(false);
+                ShowError(ex);
+                Disconnect();
+            }
+            finally
+            {
+                _digContinuousReadBusy = false;
+            }
+        }
+
         //　デジタル読み取り処理
         private async void DigRead()
         {
+            if (_digContinuousEnabled)
+            {
+                return;
+            }
 
             btnDigRead.Enabled = false;
             try
@@ -223,9 +292,55 @@ namespace PLCViewer
             AnaRead();
         }
 
+        // 「連続読み込み」ラジオボタンのトグル動作(単独配置のため、クリックのたびにON/OFFを切り替える)。
+        private void RdoAnaContinuous_Click(object? sender, EventArgs e)
+        {
+            SetAnaContinuousMode(!_anaContinuousEnabled);
+        }
+
+        // 連続読み込みのON/OFFを切り替える。ON時は読込・書込ボタンをdisableにし、1秒間隔のタイマーを開始する。
+        private void SetAnaContinuousMode(bool enabled)
+        {
+            _anaContinuousEnabled = enabled;
+            rdoAnaContinuous.Checked = enabled;
+            btnAnaRead.Enabled = !enabled;
+            btnAnaWrite.Enabled = !enabled;
+            timerAnaContinuous.Enabled = enabled;
+        }
+
+        // 連続読み込みタイマーのTickごとにアナログ読み込みを実行する。前回の読み込みが完了していない場合はスキップする。
+        private async void TimerAnaContinuous_Tick(object? sender, EventArgs e)
+        {
+            if (_anaContinuousReadBusy)
+            {
+                return;
+            }
+
+            _anaContinuousReadBusy = true;
+            try
+            {
+                EnsureConnected();
+                await ReadAnalogAsync();
+            }
+            catch (Exception ex)
+            {
+                SetAnaContinuousMode(false);
+                ShowError(ex);
+                Disconnect();
+            }
+            finally
+            {
+                _anaContinuousReadBusy = false;
+            }
+        }
+
         // アナログ読み取り処理
         private async void AnaRead()
         {
+            if (_anaContinuousEnabled)
+            {
+                return;
+            }
 
             btnAnaRead.Enabled = false;
             try
@@ -736,13 +851,13 @@ namespace PLCViewer
         }
 
         // OwnerDraw用: 列ヘッダーは既定の描画に任せる。
-        private static void ListView_DrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
+        private void ListView_DrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
         {
             e.DrawDefault = true;
         }
 
         // OwnerDraw用: Details表示の実際の描画はDrawSubItemで行うため既定描画に任せる。
-        private static void ListView_DrawItem(object? sender, DrawListViewItemEventArgs e)
+        private void ListView_DrawItem(object? sender, DrawListViewItemEventArgs e)
         {
             e.DrawDefault = true;
         }
@@ -753,7 +868,7 @@ namespace PLCViewer
         // 行選択時にSubItem.BackColor(変更セルの黄色)が選択色で塗り潰され、
         // どのセルが変更されたか分からなくなる問題を解消する。
         // 変更セルは常に黄色のまま描画し、未変更セルは選択中のみ薄い水色で塗る。
-        private static void ListView_DrawSubItem(object? sender, DrawListViewSubItemEventArgs e)
+        private void ListView_DrawSubItem(object? sender, DrawListViewSubItemEventArgs e)
         {
             if (e.SubItem is null)
             {

@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             _tlpMain = new TableLayoutPanel();
             _grpConnection = new GroupBox();
@@ -50,10 +51,13 @@
             _lblDigAddress = new Label();
             txtDigReadAddress = new TextBox();
             btnDigRead = new Button();
+            rdoDigContinuous = new RadioButton();
             btnDigWrite = new Button();
             btnDigCopy = new Button();
             btnDigPaste = new Button();
+            chkDigBitOrderReversed = new CheckBox();
             lvwDigital = new ListView();
+            timerDigContinuous = new System.Windows.Forms.Timer(components);
             _grpAnalog = new GroupBox();
             _tlpAnalog = new TableLayoutPanel();
             _flpAnalogControls = new FlowLayoutPanel();
@@ -62,10 +66,12 @@
             _lblAnaAddress = new Label();
             txtAnaReadAddress = new TextBox();
             btnAnaRead = new Button();
+            rdoAnaContinuous = new RadioButton();
             btnAnaWrite = new Button();
             btnAnaCopy = new Button();
             btnAnaPaste = new Button();
             lvwAnalog = new ListView();
+            timerAnaContinuous = new System.Windows.Forms.Timer(components);
             _tlpMain.SuspendLayout();
             _grpConnection.SuspendLayout();
             _tlpConnection.SuspendLayout();
@@ -147,7 +153,7 @@
             _lblPlcSeries.Location = new Point(3, 8);
             _lblPlcSeries.Margin = new Padding(3, 8, 3, 3);
             _lblPlcSeries.Name = "_lblPlcSeries";
-            _lblPlcSeries.Size = new Size(75, 15);
+            _lblPlcSeries.Size = new Size(65, 15);
             _lblPlcSeries.TabIndex = 0;
             _lblPlcSeries.Text = "PLCシリーズ:";
             // 
@@ -155,7 +161,7 @@
             // 
             cboPlcSeries.AccessibleName = "PLCシリーズ";
             cboPlcSeries.DropDownStyle = ComboBoxStyle.DropDownList;
-            cboPlcSeries.Location = new Point(84, 3);
+            cboPlcSeries.Location = new Point(74, 3);
             cboPlcSeries.Margin = new Padding(3, 3, 12, 3);
             cboPlcSeries.Name = "cboPlcSeries";
             cboPlcSeries.Size = new Size(160, 23);
@@ -165,7 +171,7 @@
             // _lblIp
             // 
             _lblIp.AutoSize = true;
-            _lblIp.Location = new Point(259, 8);
+            _lblIp.Location = new Point(249, 8);
             _lblIp.Margin = new Padding(3, 8, 3, 3);
             _lblIp.Name = "_lblIp";
             _lblIp.Size = new Size(55, 15);
@@ -175,7 +181,7 @@
             // txtIpAddress
             // 
             txtIpAddress.AccessibleName = "IPアドレス";
-            txtIpAddress.Location = new Point(320, 3);
+            txtIpAddress.Location = new Point(310, 3);
             txtIpAddress.Margin = new Padding(3, 3, 12, 3);
             txtIpAddress.Name = "txtIpAddress";
             txtIpAddress.Size = new Size(130, 23);
@@ -185,7 +191,7 @@
             // _lblPort
             // 
             _lblPort.AutoSize = true;
-            _lblPort.Location = new Point(465, 8);
+            _lblPort.Location = new Point(455, 8);
             _lblPort.Margin = new Padding(3, 8, 3, 3);
             _lblPort.Name = "_lblPort";
             _lblPort.Size = new Size(60, 15);
@@ -195,7 +201,7 @@
             // txtPort
             // 
             txtPort.AccessibleName = "ポート番号";
-            txtPort.Location = new Point(531, 3);
+            txtPort.Location = new Point(521, 3);
             txtPort.Margin = new Padding(3, 3, 12, 3);
             txtPort.Name = "txtPort";
             txtPort.Size = new Size(60, 23);
@@ -206,7 +212,7 @@
             // 
             btnConnect.AccessibleDescription = "PLCへ接続します";
             btnConnect.AccessibleName = "接続";
-            btnConnect.Location = new Point(606, 3);
+            btnConnect.Location = new Point(596, 3);
             btnConnect.Name = "btnConnect";
             btnConnect.Size = new Size(90, 23);
             btnConnect.TabIndex = 6;
@@ -218,7 +224,7 @@
             btnDisconnect.AccessibleDescription = "PLCから切断します";
             btnDisconnect.AccessibleName = "切断";
             btnDisconnect.Enabled = false;
-            btnDisconnect.Location = new Point(702, 3);
+            btnDisconnect.Location = new Point(692, 3);
             btnDisconnect.Name = "btnDisconnect";
             btnDisconnect.Size = new Size(90, 23);
             btnDisconnect.TabIndex = 7;
@@ -269,9 +275,11 @@
             _flpDigitalControls.Controls.Add(_lblDigAddress);
             _flpDigitalControls.Controls.Add(txtDigReadAddress);
             _flpDigitalControls.Controls.Add(btnDigRead);
+            _flpDigitalControls.Controls.Add(rdoDigContinuous);
             _flpDigitalControls.Controls.Add(btnDigWrite);
             _flpDigitalControls.Controls.Add(btnDigCopy);
             _flpDigitalControls.Controls.Add(btnDigPaste);
+            _flpDigitalControls.Controls.Add(chkDigBitOrderReversed);
             _flpDigitalControls.Dock = DockStyle.Fill;
             _flpDigitalControls.Location = new Point(3, 3);
             _flpDigitalControls.Name = "_flpDigitalControls";
@@ -326,20 +334,34 @@
             btnDigRead.AccessibleName = "デジタル読み込み実行";
             btnDigRead.Location = new Point(347, 3);
             btnDigRead.Name = "btnDigRead";
-            btnDigRead.Size = new Size(100, 23);
+            btnDigRead.Size = new Size(80, 23);
             btnDigRead.TabIndex = 4;
             btnDigRead.Text = "読込";
             btnDigRead.Click += BtnDigRead_Click;
+            // 
+            // rdoDigContinuous
+            // 
+            rdoDigContinuous.AccessibleDescription = "ONの間、1秒間隔でデジタル表示エリアへの読み込みを繰り返します";
+            rdoDigContinuous.AccessibleName = "デジタル連続読み込み";
+            rdoDigContinuous.AutoSize = true;
+            rdoDigContinuous.Location = new Point(433, 6);
+            rdoDigContinuous.Margin = new Padding(6, 6, 3, 3);
+            rdoDigContinuous.Name = "rdoDigContinuous";
+            rdoDigContinuous.Size = new Size(85, 19);
+            rdoDigContinuous.TabIndex = 5;
+            rdoDigContinuous.Text = "連続読み込み";
+            rdoDigContinuous.UseVisualStyleBackColor = true;
+            rdoDigContinuous.Click += RdoDigContinuous_Click;
             // 
             // btnDigWrite
             // 
             btnDigWrite.AccessibleDescription = "デジタル表示リストの全行をPLCへ一括書き込みます";
             btnDigWrite.AccessibleName = "デジタルPLCへ書込";
-            btnDigWrite.Location = new Point(462, 3);
+            btnDigWrite.Location = new Point(533, 3);
             btnDigWrite.Margin = new Padding(12, 3, 3, 3);
             btnDigWrite.Name = "btnDigWrite";
             btnDigWrite.Size = new Size(90, 23);
-            btnDigWrite.TabIndex = 5;
+            btnDigWrite.TabIndex = 6;
             btnDigWrite.Text = "PLCへ書込";
             btnDigWrite.Click += BtnDigWrite_Click;
             // 
@@ -347,11 +369,11 @@
             // 
             btnDigCopy.AccessibleDescription = "デジタル表示リストの内容をクリップボードへコピーします";
             btnDigCopy.AccessibleName = "デジタルコピー";
-            btnDigCopy.Location = new Point(595, 3);
+            btnDigCopy.Location = new Point(575, 3);
             btnDigCopy.Margin = new Padding(40, 3, 3, 3);
             btnDigCopy.Name = "btnDigCopy";
             btnDigCopy.Size = new Size(80, 23);
-            btnDigCopy.TabIndex = 6;
+            btnDigCopy.TabIndex = 7;
             btnDigCopy.Text = "コピー";
             btnDigCopy.Click += BtnDigCopy_Click;
             // 
@@ -359,12 +381,26 @@
             // 
             btnDigPaste.AccessibleDescription = "クリップボードの内容をデジタル表示リストへ貼り付けます";
             btnDigPaste.AccessibleName = "デジタル貼り付け";
-            btnDigPaste.Location = new Point(681, 3);
+            btnDigPaste.Location = new Point(661, 3);
             btnDigPaste.Name = "btnDigPaste";
             btnDigPaste.Size = new Size(80, 23);
-            btnDigPaste.TabIndex = 7;
+            btnDigPaste.TabIndex = 8;
             btnDigPaste.Text = "貼り付け";
             btnDigPaste.Click += BtnDigPaste_Click;
+            // 
+            // chkDigBitOrderReversed
+            // 
+            chkDigBitOrderReversed.AccessibleDescription = "チェック時はBit0を左端、Bit15を右端に表示します";
+            chkDigBitOrderReversed.AccessibleName = "デジタル表示 ビット順反転";
+            chkDigBitOrderReversed.AutoSize = true;
+            chkDigBitOrderReversed.Location = new Point(747, 6);
+            chkDigBitOrderReversed.Margin = new Padding(3, 6, 3, 3);
+            chkDigBitOrderReversed.Name = "chkDigBitOrderReversed";
+            chkDigBitOrderReversed.Size = new Size(133, 19);
+            chkDigBitOrderReversed.TabIndex = 9;
+            chkDigBitOrderReversed.Text = "ビット順を反転(0→15)";
+            chkDigBitOrderReversed.UseVisualStyleBackColor = true;
+            chkDigBitOrderReversed.CheckedChanged += ChkDigBitOrderReversed_CheckedChanged;
             // 
             // lvwDigital
             // 
@@ -380,9 +416,9 @@
             lvwDigital.TabIndex = 1;
             lvwDigital.UseCompatibleStateImageBehavior = false;
             lvwDigital.View = View.Details;
-            lvwDigital.DrawColumnHeader += ListView_DrawColumnHeader;
-            lvwDigital.DrawItem += ListView_DrawItem;
-            lvwDigital.DrawSubItem += ListView_DrawSubItem;
+            lvwDigital.DrawColumnHeader += this.ListView_DrawColumnHeader;
+            lvwDigital.DrawItem += this.ListView_DrawItem;
+            lvwDigital.DrawSubItem += this.ListView_DrawSubItem;
             lvwDigital.MouseDoubleClick += LvwDigital_MouseDoubleClick;
             // 
             // _grpAnalog
@@ -419,6 +455,7 @@
             _flpAnalogControls.Controls.Add(_lblAnaAddress);
             _flpAnalogControls.Controls.Add(txtAnaReadAddress);
             _flpAnalogControls.Controls.Add(btnAnaRead);
+            _flpAnalogControls.Controls.Add(rdoAnaContinuous);
             _flpAnalogControls.Controls.Add(btnAnaWrite);
             _flpAnalogControls.Controls.Add(btnAnaCopy);
             _flpAnalogControls.Controls.Add(btnAnaPaste);
@@ -476,20 +513,34 @@
             btnAnaRead.AccessibleName = "アナログ読み込み実行";
             btnAnaRead.Location = new Point(347, 3);
             btnAnaRead.Name = "btnAnaRead";
-            btnAnaRead.Size = new Size(100, 23);
+            btnAnaRead.Size = new Size(80, 23);
             btnAnaRead.TabIndex = 4;
             btnAnaRead.Text = "読込";
             btnAnaRead.Click += BtnAnaRead_Click;
+            // 
+            // rdoAnaContinuous
+            // 
+            rdoAnaContinuous.AccessibleDescription = "ONの間、1秒間隔でアナログ表示エリアへの読み込みを繰り返します";
+            rdoAnaContinuous.AccessibleName = "アナログ連続読み込み";
+            rdoAnaContinuous.AutoSize = true;
+            rdoAnaContinuous.Location = new Point(433, 6);
+            rdoAnaContinuous.Margin = new Padding(6, 6, 3, 3);
+            rdoAnaContinuous.Name = "rdoAnaContinuous";
+            rdoAnaContinuous.Size = new Size(85, 19);
+            rdoAnaContinuous.TabIndex = 5;
+            rdoAnaContinuous.Text = "連続読み込み";
+            rdoAnaContinuous.UseVisualStyleBackColor = true;
+            rdoAnaContinuous.Click += RdoAnaContinuous_Click;
             // 
             // btnAnaWrite
             // 
             btnAnaWrite.AccessibleDescription = "アナログ表示リストの全行をPLCへ一括書き込みます";
             btnAnaWrite.AccessibleName = "アナログPLCへ書込";
-            btnAnaWrite.Location = new Point(462, 3);
+            btnAnaWrite.Location = new Point(533, 3);
             btnAnaWrite.Margin = new Padding(12, 3, 3, 3);
             btnAnaWrite.Name = "btnAnaWrite";
             btnAnaWrite.Size = new Size(90, 23);
-            btnAnaWrite.TabIndex = 5;
+            btnAnaWrite.TabIndex = 6;
             btnAnaWrite.Text = "PLCへ書込";
             btnAnaWrite.Click += BtnAnaWrite_Click;
             // 
@@ -497,11 +548,11 @@
             // 
             btnAnaCopy.AccessibleDescription = "アナログ表示リストの内容をクリップボードへコピーします";
             btnAnaCopy.AccessibleName = "アナログコピー";
-            btnAnaCopy.Location = new Point(595, 3);
+            btnAnaCopy.Location = new Point(575, 3);
             btnAnaCopy.Margin = new Padding(40, 3, 3, 3);
             btnAnaCopy.Name = "btnAnaCopy";
             btnAnaCopy.Size = new Size(80, 23);
-            btnAnaCopy.TabIndex = 6;
+            btnAnaCopy.TabIndex = 7;
             btnAnaCopy.Text = "コピー";
             btnAnaCopy.Click += BtnAnaCopy_Click;
             // 
@@ -509,10 +560,10 @@
             // 
             btnAnaPaste.AccessibleDescription = "クリップボードの内容をアナログ表示リストへ貼り付けます";
             btnAnaPaste.AccessibleName = "アナログ貼り付け";
-            btnAnaPaste.Location = new Point(681, 3);
+            btnAnaPaste.Location = new Point(661, 3);
             btnAnaPaste.Name = "btnAnaPaste";
             btnAnaPaste.Size = new Size(80, 23);
-            btnAnaPaste.TabIndex = 7;
+            btnAnaPaste.TabIndex = 8;
             btnAnaPaste.Text = "貼り付け";
             btnAnaPaste.Click += BtnAnaPaste_Click;
             // 
@@ -530,10 +581,20 @@
             lvwAnalog.TabIndex = 1;
             lvwAnalog.UseCompatibleStateImageBehavior = false;
             lvwAnalog.View = View.Details;
-            lvwAnalog.DrawColumnHeader += ListView_DrawColumnHeader;
-            lvwAnalog.DrawItem += ListView_DrawItem;
-            lvwAnalog.DrawSubItem += ListView_DrawSubItem;
+            lvwAnalog.DrawColumnHeader += this.ListView_DrawColumnHeader;
+            lvwAnalog.DrawItem += this.ListView_DrawItem;
+            lvwAnalog.DrawSubItem += this.ListView_DrawSubItem;
             lvwAnalog.MouseDoubleClick += LvwAnalog_MouseDoubleClick;
+            // 
+            // timerDigContinuous
+            // 
+            timerDigContinuous.Interval = 1000;
+            timerDigContinuous.Tick += TimerDigContinuous_Tick;
+            // 
+            // timerAnaContinuous
+            // 
+            timerAnaContinuous.Interval = 1000;
+            timerAnaContinuous.Tick += TimerAnaContinuous_Tick;
             // 
             // Form1
             // 
@@ -591,10 +652,13 @@
         private Label _lblDigAddress;
         private TextBox txtDigReadAddress;
         private Button btnDigRead;
+        private RadioButton rdoDigContinuous;
         private Button btnDigWrite;
         private Button btnDigCopy;
         private Button btnDigPaste;
+        private CheckBox chkDigBitOrderReversed;
         private ListView lvwDigital;
+        private System.Windows.Forms.Timer timerDigContinuous;
         private GroupBox _grpAnalog;
         private TableLayoutPanel _tlpAnalog;
         private FlowLayoutPanel _flpAnalogControls;
@@ -603,9 +667,11 @@
         private Label _lblAnaAddress;
         private TextBox txtAnaReadAddress;
         private Button btnAnaRead;
+        private RadioButton rdoAnaContinuous;
         private Button btnAnaWrite;
         private Button btnAnaCopy;
         private Button btnAnaPaste;
         private ListView lvwAnalog;
+        private System.Windows.Forms.Timer timerAnaContinuous;
     }
 }
