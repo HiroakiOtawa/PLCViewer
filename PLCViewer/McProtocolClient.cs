@@ -24,8 +24,7 @@ namespace PLCViewer
 
         private const ushort CommandBatchRead = 0x0401;
         private const ushort CommandBatchWrite = 0x1401;
-        private const ushort SubCommandWordAccess = 0x0000;
-        private const ushort SubCommandWordAccessR = 0x0002; // iQ-R用サブコマンドを追加
+        private const ushort SubCommandWordAccess = 0x0000; // 標準デバイス指定(先頭アドレス3バイト+デバイスコード1バイト)。Q/iQ-R/KV共通
 
         private const int FixedHeaderLength = 7; // subheader(2)+net(1)+pc(1)+io(2)+station(1)
         private const int TimerLength = 2;
@@ -198,40 +197,27 @@ namespace PLCViewer
 
         private byte[] BuildReadRequest(ushort deviceCode, int headDevice, int count)
         {
-            // ✨ iQ-Rの場合は12バイト、それ以外（Q/KV）は10バイト
-            bool isRSeries = Series == PlcSeries.MitsubishiIqR; // ※PlcSeriesの定義名に合わせてください
-            int requestDataLength = isRSeries ? 12 : 10;
+            // D/W/M/Bはアドレス範囲が3バイトに収まるため、Q/iQ-R/KV共通の標準デバイス指定(計10バイト)を使用する。
+            // 拡張デバイス指定(先頭アドレス4バイト+デバイスコード2バイト)は3バイト範囲を超える特殊デバイス専用のため使用しない。
+            const int requestDataLength = 10;
 
             byte[] frame = CreateFrameBuffer(requestDataLength);
             Span<byte> requestData = frame.AsSpan(RequestDataOffset, requestDataLength);
 
             // コマンドの書き込み
             BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(0, 2), CommandBatchRead);
-
-            if (isRSeries)
-            {
-                // 🔹 iQ-Rシリーズ用構造 (計12バイト)
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(2, 2), SubCommandWordAccessR); // 0x0002
-                BinaryPrimitives.WriteInt32LittleEndian(requestData.Slice(4, 4), headDevice);               // 先頭アドレス(4バイト)
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(8, 2), deviceCode);              // デバイスコード(2バイト)
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(10, 2), (ushort)count);          // 点数(2バイト)
-            }
-            else
-            {
-                // 🔸 従来のQシリーズ用構造 (計10バイト)
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(2, 2), SubCommandWordAccess);  // 0x0000
-                WriteDeviceNumber(requestData.Slice(4, 3), headDevice);                                    // 先頭アドレス(3バイト)
-                requestData[7] = (byte)deviceCode;                                                         // デバイスコード(1バイト)
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(8, 2), (ushort)count);          // 点数(2バイト)
-            }
+            BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(2, 2), SubCommandWordAccess);  // 0x0000
+            WriteDeviceNumber(requestData.Slice(4, 3), headDevice);                                    // 先頭アドレス(3バイト)
+            requestData[7] = (byte)deviceCode;                                                         // デバイスコード(1バイト)
+            BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(8, 2), (ushort)count);          // 点数(2バイト)
 
             return frame;
         }
 
         private byte[] BuildWriteRequest(ushort deviceCode, int headDevice, ushort[] values)
         {
-            bool isRSeries = Series == PlcSeries.MitsubishiIqR;
-            int baseLength = isRSeries ? 12 : 10;
+            // D/W/M/Bはアドレス範囲が3バイトに収まるため、Q/iQ-R/KV共通の標準デバイス指定(先頭10バイト)を使用する。
+            const int baseLength = 10;
             int requestDataLength = baseLength + (values.Length * 2);
 
             byte[] frame = CreateFrameBuffer(requestDataLength);
@@ -239,25 +225,12 @@ namespace PLCViewer
 
             // コマンドの書き込み
             BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(0, 2), CommandBatchWrite);
+            BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(2, 2), SubCommandWordAccess);
+            WriteDeviceNumber(requestData.Slice(4, 3), headDevice);
+            requestData[7] = (byte)deviceCode;
+            BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(8, 2), (ushort)values.Length);
 
-            if (isRSeries)
-            {
-                // 🔹 iQ-Rシリーズ用構造
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(2, 2), SubCommandWordAccessR);
-                BinaryPrimitives.WriteInt32LittleEndian(requestData.Slice(4, 4), headDevice);
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(8, 2), deviceCode);
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(10, 2), (ushort)values.Length);
-            }
-            else
-            {
-                // 🔸 従来のQシリーズ用構造
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(2, 2), SubCommandWordAccess);
-                WriteDeviceNumber(requestData.Slice(4, 3), headDevice);
-                requestData[7] = (byte)deviceCode;
-                BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(8, 2), (ushort)values.Length);
-            }
-
-            // 値データの書き込み（開始位置を baseLength で動的に指定）
+            // 値データの書き込み
             for (int i = 0; i < values.Length; i++)
             {
                 BinaryPrimitives.WriteUInt16LittleEndian(requestData.Slice(baseLength + (i * 2), 2), values[i]);
@@ -317,9 +290,32 @@ namespace PLCViewer
             ushort endCode = BinaryPrimitives.ReadUInt16LittleEndian(response.AsSpan(ResponseHeaderLength, 2));
             if (endCode != 0x0000)
             {
-                throw new PlcCommunicationException($"PLCからエラー応答を受信しました。(終了コード: 0x{endCode:X4})");
+                string? detail = GetEndCodeDescription(endCode);
+                string message = detail is null
+                    ? $"PLCからエラー応答を受信しました。(終了コード: 0x{endCode:X4})"
+                    : $"PLCからエラー応答を受信しました。(終了コード: 0x{endCode:X4} {detail})";
+                throw new PlcCommunicationException(message);
             }
         }
+
+        /// <summary>
+        ///  MCプロトコルの代表的な異常終了コードに対する原因・対処の説明を取得する。該当がない場合はnull。
+        /// </summary>
+        private static string? GetEndCodeDescription(ushort endCode) => endCode switch
+        {
+            0x0055 => "CPUがRUN中のためオンライン書き込みが拒否されました。GX Works等でCPUパラメータの「RUN中書き込みを許可する」を有効にするか、CPUをSTOPにしてから書き込んでください。",
+            0xC050 => "モニタ登録が行われていません。",
+            0xC051 or 0xC052 or 0xC053 or 0xC054 => "要求データの点数や範囲がデバイスの指定範囲外です。アドレスや読み書き点数を確認してください。",
+            0xC056 => "アクセス先のデバイス範囲を超えています。先頭アドレスや点数を確認してください。",
+            0xC058 => "要求データ数とデータ長が一致していません。",
+            0xC059 => "コマンド・サブコマンドの指定が不正です。PLCシリーズ設定を確認してください。",
+            0xC05B => "PLCがそのデバイスへのアクセス権を持っていません。",
+            0xC05C => "要求内容が不正です。",
+            0xC05F => "PLCが要求を実行できない状態です(他ユニットとの通信中等)。",
+            0xC060 => "デバイスへのアクセスができません。デバイス種別やアドレス指定を確認してください。",
+            0xC061 => "要求データ長が不正です。",
+            _ => null,
+        };
 
         private static ushort GetDeviceCode(PlcDeviceType deviceType) => deviceType switch
         {
@@ -339,6 +335,12 @@ namespace PLCViewer
         ///  指定したデバイス種別がビットデバイスかどうかを取得する。
         /// </summary>
         public static bool IsBitDevice(PlcDeviceType deviceType) => deviceType is PlcDeviceType.M or PlcDeviceType.B;
+
+        /// <summary>
+        ///  ビットデバイス(M/B)の場合、先頭アドレスを16点境界に切り下げる。ワードデバイスの場合はそのまま返す。
+        /// </summary>
+        public static int AlignHeadDeviceToWordBoundary(PlcDeviceType deviceType, int headDevice)
+            => IsBitDevice(deviceType) ? headDevice - (headDevice % 16) : headDevice;
 
         private static void ValidateHeadDevice(PlcDeviceType deviceType, int headDevice)
         {
@@ -417,6 +419,15 @@ namespace PLCViewer
             => IsHexAddress(deviceType)
                 ? $"{deviceType}{deviceNumber:X}"
                 : $"{deviceType}{deviceNumber}";
+
+        /// <summary>
+        ///  デバイス種別プレフィックスを付けず、番号のみを表示用文字列に変換する。W/Bは16進表記とする。
+        ///  デバイス種別をコンボボックス等で別途選択している入力欄の表示更新に使用する。
+        /// </summary>
+        public static string FormatDeviceNumber(PlcDeviceType deviceType, int deviceNumber)
+            => IsHexAddress(deviceType)
+                ? deviceNumber.ToString("X", CultureInfo.InvariantCulture)
+                : deviceNumber.ToString(CultureInfo.InvariantCulture);
 
         public void Dispose()
         {

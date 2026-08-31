@@ -325,7 +325,7 @@
             txtDigReadAddress.Name = "txtDigReadAddress";
             txtDigReadAddress.Size = new Size(80, 23);
             txtDigReadAddress.TabIndex = 3;
-            txtDigReadAddress.Text = "M0";
+            txtDigReadAddress.Text = "0";
             txtDigReadAddress.KeyDown += TxtDigReadAddress_KeyDown;
             // 
             // btnDigRead
@@ -504,7 +504,7 @@
             txtAnaReadAddress.Name = "txtAnaReadAddress";
             txtAnaReadAddress.Size = new Size(80, 23);
             txtAnaReadAddress.TabIndex = 3;
-            txtAnaReadAddress.Text = "D200";
+            txtAnaReadAddress.Text = "200";
             txtAnaReadAddress.KeyDown += TxtAnaReadAddress_KeyDown;
             // 
             // btnAnaRead

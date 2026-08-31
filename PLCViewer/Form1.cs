@@ -106,6 +106,9 @@ namespace PLCViewer
             {
                 lvwDigital.Columns[columnIndex].DisplayIndex = reversed ? 17 - columnIndex : columnIndex;
             }
+
+            // OwnerDraw中はDisplayIndexの変更だけでは即座に再描画されないため、明示的に再描画して表示順を反映する。
+            lvwDigital.Invalidate();
         }
 
         // 「先頭アドレス」「+0」…「+9」の計11列。
@@ -120,7 +123,15 @@ namespace PLCViewer
 
         private async void BtnConnect_Click(object? sender, EventArgs e)
         {
-            connectTcp();
+            try
+            {
+                await ConnectAsync();
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+                Disconnect();
+            }
         }
 
         private void BtnDisconnect_Click(object? sender, EventArgs e)
@@ -128,7 +139,9 @@ namespace PLCViewer
             Disconnect();
         }
 
-        private async void connectTcp()
+        // PLCへ接続する。IPアドレス・ポート番号の検証、接続処理、および接続成功時の画面状態更新を行う。
+        // 接続に失敗した場合は例外をスローするため、呼び出し元でエラー表示・切断処理を行うこと。
+        private async Task ConnectAsync()
         {
             btnConnect.Enabled = false;
             try
@@ -155,11 +168,6 @@ namespace PLCViewer
                 cboPlcSeries.Enabled = false;
                 txtIpAddress.Enabled = false;
                 txtPort.Enabled = false;
-            }
-            catch (Exception ex)
-            {
-                ShowError(ex);
-                Disconnect();
             }
             finally
             {
@@ -245,6 +253,11 @@ namespace PLCViewer
             btnDigRead.Enabled = false;
             try
             {
+                if (!_plcClient.IsConnected)
+                {
+                    await ConnectAsync();
+                }
+
                 EnsureConnected();
                 await ReadDigitalAsync();
             }
@@ -265,6 +278,14 @@ namespace PLCViewer
         {
             PlcDeviceType deviceType = SelectedDigitalDevice;
             int deviceNumber = McProtocolClient.ParseDeviceNumber(deviceType, txtDigReadAddress.Text);
+
+            // ビットデバイスはワード単位で扱うため、先頭アドレスが16点境界でない場合は自動的に切り下げる。
+            int alignedDeviceNumber = McProtocolClient.AlignHeadDeviceToWordBoundary(deviceType, deviceNumber);
+            if (alignedDeviceNumber != deviceNumber)
+            {
+                deviceNumber = alignedDeviceNumber;
+                txtDigReadAddress.Text = McProtocolClient.FormatDeviceNumber(deviceType, deviceNumber);
+            }
 
             // 画面に表示できる行数分(1行=1ワード)を一度の通信で読み込む。
             int rowCount = Math.Min(CalculateVisibleRowCount(lvwDigital), MaxReadWordsPerRequest);
@@ -345,6 +366,11 @@ namespace PLCViewer
             btnAnaRead.Enabled = false;
             try
             {
+                if (!_plcClient.IsConnected)
+                {
+                    await ConnectAsync();
+                }
+
                 EnsureConnected();
                 await ReadAnalogAsync();
             }
