@@ -806,6 +806,244 @@ namespace PLCViewer
             }
         }
 
+        // デジタル表示リスト用「ファイル保存」: 範囲指定ダイアログでPLCから読み込み、TXTファイルへ書き出す。
+        private async void BtnDigFileSave_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                EnsureConnected();
+
+                PlcDeviceType deviceType = SelectedDigitalDevice;
+                using var rangeDialog = new DeviceRangeDialog(
+                    "デジタル ファイル保存範囲指定", deviceType, txtDigReadAddress.Text, "ワード数:", CalculateVisibleRowCount(lvwDigital), MaxReadWordsPerRequest);
+                if (rangeDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                int deviceNumber = McProtocolClient.AlignHeadDeviceToWordBoundary(deviceType, rangeDialog.DeviceNumber);
+                int addressStep = McProtocolClient.IsBitDevice(deviceType) ? 16 : 1;
+
+                ushort[] values = await _plcClient.ReadWordsAsync(deviceType, deviceNumber, rangeDialog.Count);
+
+                using SaveFileDialog saveDialog = CreateTxtSaveFileDialog("デジタルデバイス.txt");
+                if (saveDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                var builder = new StringBuilder();
+                builder.AppendLine(string.Join('\t', lvwDigital.Columns.Cast<ColumnHeader>().Select(c => c.Text)));
+                for (int i = 0; i < values.Length; i++)
+                {
+                    int currentDeviceNumber = deviceNumber + (i * addressStep);
+                    string addressText = McProtocolClient.FormatDeviceAddress(deviceType, currentDeviceNumber);
+                    IEnumerable<string> bitTexts = Enumerable.Range(0, 16).Select(bit => ((values[i] >> (15 - bit)) & 1).ToString());
+                    builder.AppendLine(string.Join('\t', new[] { addressText }.Concat(bitTexts).Append(values[i].ToString())));
+                }
+
+                await File.WriteAllTextAsync(saveDialog.FileName, builder.ToString(), Encoding.UTF8);
+                MessageBox.Show(this, "ファイルへの保存が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+                Disconnect();
+            }
+        }
+
+        // アナログ表示リスト用「ファイル保存」: 範囲指定ダイアログでPLCから読み込み、TXTファイルへ書き出す。
+        private async void BtnAnaFileSave_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                EnsureConnected();
+
+                PlcDeviceType deviceType = SelectedAnalogDevice;
+                int currentRowCount = Math.Min(CalculateVisibleRowCount(lvwAnalog), MaxReadWordsPerRequest / AnalogWordCount);
+                using var rangeDialog = new DeviceRangeDialog(
+                    "アナログ ファイル保存範囲指定", deviceType, txtAnaReadAddress.Text, "行数(1行=10ワード):", currentRowCount, MaxReadWordsPerRequest / AnalogWordCount);
+                if (rangeDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                int deviceNumber = rangeDialog.DeviceNumber;
+                int rowCount = rangeDialog.Count;
+
+                ushort[] values = await _plcClient.ReadWordsAsync(deviceType, deviceNumber, rowCount * AnalogWordCount);
+
+                using SaveFileDialog saveDialog = CreateTxtSaveFileDialog("アナログデバイス.txt");
+                if (saveDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                var builder = new StringBuilder();
+                builder.AppendLine(string.Join('\t', lvwAnalog.Columns.Cast<ColumnHeader>().Select(c => c.Text)));
+                for (int i = 0; i < rowCount; i++)
+                {
+                    string addressText = McProtocolClient.FormatDeviceAddress(deviceType, deviceNumber + (i * AnalogWordCount));
+                    IEnumerable<string> wordTexts = values.AsSpan(i * AnalogWordCount, AnalogWordCount).ToArray().Select(v => v.ToString());
+                    builder.AppendLine(string.Join('\t', new[] { addressText }.Concat(wordTexts)));
+                }
+
+                await File.WriteAllTextAsync(saveDialog.FileName, builder.ToString(), Encoding.UTF8);
+                MessageBox.Show(this, "ファイルへの保存が完了しました。", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+                Disconnect();
+            }
+        }
+
+        // デジタル表示リスト用「ファイル読込」: TXTファイルを解析し、確認の上でPLCへ書き込む。
+        private async void BtnDigFileLoad_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                EnsureConnected();
+
+                using OpenFileDialog openDialog = CreateTxtOpenFileDialog();
+                if (openDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                string text = await File.ReadAllTextAsync(openDialog.FileName, Encoding.UTF8);
+
+                var writeTargets = new List<(PlcDeviceType Type, int Number, ushort Value)>();
+                foreach (string[] cells in ParseTabSeparatedRows(text))
+                {
+                    if (IsHeaderRow(cells))
+                    {
+                        continue;
+                    }
+
+                    if (cells.Length < DigitalMinColumnCount)
+                    {
+                        throw new FormatException(
+                            $"ファイルの列数が不足しています(アドレス+15～0の{DigitalMinColumnCount}列必要): '{cells[0]}'");
+                    }
+
+                    (PlcDeviceType type, int number) = McProtocolClient.ParseDeviceAddress(cells[0]);
+                    ushort value = ReconstructWordFromBitTexts(cells[0], i => cells[16 - i]);
+                    writeTargets.Add((type, number, value));
+                }
+
+                if (writeTargets.Count == 0)
+                {
+                    MessageBox.Show(this, "書き込み可能なデータがありません。", "確認", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                if (!ConfirmWrite("読み込んだファイル(デジタル)", writeTargets.Count))
+                {
+                    return;
+                }
+
+                foreach ((PlcDeviceType type, int number, ushort value) in writeTargets)
+                {
+                    await _plcClient.WriteWordsAsync(type, number, [value]);
+                }
+
+                await ReadDigitalAsync();
+                MessageBox.Show(this, $"書き込みが完了しました。({writeTargets.Count}件)", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+                Disconnect();
+            }
+        }
+
+        // アナログ表示リスト用「ファイル読込」: TXTファイルを解析し、確認の上でPLCへ書き込む。
+        private async void BtnAnaFileLoad_Click(object? sender, EventArgs e)
+        {
+            try
+            {
+                EnsureConnected();
+
+                using OpenFileDialog openDialog = CreateTxtOpenFileDialog();
+                if (openDialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    return;
+                }
+
+                string text = await File.ReadAllTextAsync(openDialog.FileName, Encoding.UTF8);
+
+                var writeTargets = new List<(PlcDeviceType Type, int Number, ushort[] Values)>();
+                foreach (string[] cells in ParseTabSeparatedRows(text))
+                {
+                    if (IsHeaderRow(cells))
+                    {
+                        continue;
+                    }
+
+                    if (cells.Length < AnalogMinColumnCount)
+                    {
+                        throw new FormatException(
+                            $"ファイルの列数が不足しています(先頭アドレス+10ワードの{AnalogMinColumnCount}列必要): '{cells[0]}'");
+                    }
+
+                    (PlcDeviceType type, int number) = McProtocolClient.ParseDeviceAddress(cells[0]);
+
+                    var values = new ushort[AnalogWordCount];
+                    for (int i = 0; i < AnalogWordCount; i++)
+                    {
+                        string valueText = cells[i + 1].Trim();
+                        if (!ushort.TryParse(valueText, out values[i]))
+                        {
+                            throw new FormatException($"行 '{cells[0]}' の+{i}の値が不正です: '{valueText}' (0～65535の整数)");
+                        }
+                    }
+                    writeTargets.Add((type, number, values));
+                }
+
+                if (writeTargets.Count == 0)
+                {
+                    MessageBox.Show(this, "書き込み可能なデータがありません。", "確認", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                if (!ConfirmWrite("読み込んだファイル(アナログ)", writeTargets.Count))
+                {
+                    return;
+                }
+
+                foreach ((PlcDeviceType type, int number, ushort[] values) in writeTargets)
+                {
+                    await _plcClient.WriteWordsAsync(type, number, values);
+                }
+
+                await ReadAnalogAsync();
+                MessageBox.Show(this, $"書き込みが完了しました。({writeTargets.Count}件)", "完了", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                ShowError(ex);
+                Disconnect();
+            }
+        }
+
+        // TXT保存用のSaveFileDialogを共通生成する。
+        private static SaveFileDialog CreateTxtSaveFileDialog(string defaultFileName) => new()
+        {
+            Filter = "テキストファイル (*.txt)|*.txt|すべてのファイル (*.*)|*.*",
+            DefaultExt = "txt",
+            FileName = defaultFileName,
+            AddExtension = true,
+        };
+
+        // TXT読込用のOpenFileDialogを共通生成する。
+        private static OpenFileDialog CreateTxtOpenFileDialog() => new()
+        {
+            Filter = "テキストファイル (*.txt)|*.txt|すべてのファイル (*.*)|*.*",
+            DefaultExt = "txt",
+            CheckFileExists = true,
+        };
+
         // 1ワード(16bit)の値をBit15～Bit0に分解し、同一アドレスの行があれば更新、なければ追加する。
         // resetBaselineがtrueの場合(PLC読込時)は今回の値を変更検知の基準(baseline)として保存する。
         private void UpdateDigitalListView(PlcDeviceType deviceType, int deviceNumber, ushort value, bool resetBaseline = false)
@@ -1090,7 +1328,13 @@ namespace PLCViewer
                 throw new FormatException("クリップボードにテキストがありません。");
             }
 
-            return Clipboard.GetText()
+            return ParseTabSeparatedRows(Clipboard.GetText());
+        }
+
+        // タブ区切りテキストを行×セルの一覧に分解する(クリップボード貼り付け・ファイル読み込み共通)。
+        private static List<string[]> ParseTabSeparatedRows(string text)
+        {
+            return text
                 .Split(["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries)
                 .Select(line => line.Split('\t'))
                 .ToList();
